@@ -1,0 +1,91 @@
+{
+  "project_name": "Expense Tracker",
+  "entities": [
+    {
+      "name": "category",
+      "plural": "categories",
+      "fields": [
+        {"name": "name", "type": "text", "unique": true, "description": "Category name, e.g. Food"}
+      ]
+    },
+    {
+      "name": "expense",
+      "plural": "expenses",
+      "fields": [
+        {"name": "amount", "type": "real", "description": "Amount spent, greater than 0"},
+        {"name": "description", "type": "text", "description": "What the money was spent on"},
+        {"name": "date", "type": "date", "description": "When it was spent"},
+        {"name": "note", "type": "text", "required": false, "description": "Optional note"}
+      ],
+      "relations": [
+        {"field": "category_id", "target": "category", "on_delete": "restrict"}
+      ]
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "list_categories", "method": "GET", "path": "/api/categories",
+      "summary": "List all categories", "features": ["F5"],
+      "response": {"entity": "category", "view": "read", "many": true},
+      "success_status": 200
+    },
+    {
+      "id": "create_category", "method": "POST", "path": "/api/categories",
+      "summary": "Create a category", "features": ["F5"],
+      "request": {"entity": "category", "view": "create"},
+      "response": {"entity": "category", "view": "read"},
+      "success_status": 201, "error_statuses": [409, 422]
+    },
+    {
+      "id": "delete_category", "method": "DELETE", "path": "/api/categories/{id}",
+      "summary": "Delete a category that has no expenses", "features": ["F5"],
+      "success_status": 204, "error_statuses": [404, 409]
+    },
+    {
+      "id": "list_expenses", "method": "GET", "path": "/api/expenses",
+      "summary": "List all expenses, newest date first", "features": ["F1", "F2", "F4"],
+      "response": {"entity": "expense", "view": "read", "many": true},
+      "success_status": 200
+    },
+    {
+      "id": "get_expense", "method": "GET", "path": "/api/expenses/{id}",
+      "summary": "Get one expense", "features": ["F2"],
+      "response": {"entity": "expense", "view": "read"},
+      "success_status": 200, "error_statuses": [404]
+    },
+    {
+      "id": "create_expense", "method": "POST", "path": "/api/expenses",
+      "summary": "Add an expense", "features": ["F1"],
+      "request": {"entity": "expense", "view": "create"},
+      "response": {"entity": "expense", "view": "read"},
+      "success_status": 201, "error_statuses": [400, 422]
+    },
+    {
+      "id": "update_expense", "method": "PUT", "path": "/api/expenses/{id}",
+      "summary": "Edit an expense (partial update)", "features": ["F3"],
+      "request": {"entity": "expense", "view": "update"},
+      "response": {"entity": "expense", "view": "read"},
+      "success_status": 200, "error_statuses": [400, 404, 422]
+    },
+    {
+      "id": "delete_expense", "method": "DELETE", "path": "/api/expenses/{id}",
+      "summary": "Delete an expense", "features": ["F4"],
+      "success_status": 204, "error_statuses": [404]
+    },
+    {
+      "id": "monthly_summary", "method": "GET", "path": "/api/summary",
+      "summary": "Total and count of expenses in one month", "features": ["F6"],
+      "query_params": [
+        {"name": "month", "type": "text", "description": "Month as YYYY-MM"}
+      ],
+      "response": {
+        "fields": [
+          {"name": "month", "type": "text"},
+          {"name": "total", "type": "real"},
+          {"name": "count", "type": "integer"}
+        ]
+      },
+      "success_status": 200, "error_statuses": [400, 422]
+    }
+  ]
+}

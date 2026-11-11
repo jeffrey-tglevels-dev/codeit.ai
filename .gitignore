@@ -1,0 +1,10 @@
+workspace/*
+output/*
+!workspace/.gitkeep
+!output/.gitkeep
+__pycache__/
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+*.db

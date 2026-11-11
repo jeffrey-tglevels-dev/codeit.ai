@@ -2,9 +2,9 @@
 
 This describes the multi-coding-agent application itself, not the apps it generates (see `generated-app-project-structure.md` for those).
 
-**Status:** draft; file skeleton only. Every `.py`, `.tmpl` and `requirements.txt` is currently empty; only `.gitignore`, `README.md` and `docs/` have content. Nothing is implemented yet.
+**Status:** Phase 1 done. `models/`, the config files and the sample-app fixture in `tests/fixtures/` are implemented and tested; files for later phases (`agents/`, `codegen/`, `orchestrator/`, `packaging/`, `sandbox/`, `routes/`, `console/`) exist but are empty.
 
-**Skeleton vs target:** the empty skeleton still uses the old design's names (`agents/db_engineer.py`, `agents/developer.py`, `models/architecture.py`, `models/build.py`) and lacks `codegen/` and `console/`. They will be renamed and added in a later code change. The layout below is the target.
+**Skeleton vs target:** the old design's files were renamed in Phase 1 (`db_engineer.py`/`developer.py`/`qa.py` -> `backend.py`/`frontend.py`/`tester.py`; `architecture.py`/`build.py` -> `contract.py`/`results.py`), so the layout below is the current one.
 
 **What the app does:** takes an idea ("build a gym tracking app"), runs agents (PM, Architect, then Backend, Frontend and Tester in parallel) to build and test it, then delivers (A) a ZIP of the source and (B) a Docker image run in a local sandbox with a preview URL.
 
@@ -117,6 +117,8 @@ Static HTML/JS served by FastAPI. Operator-only, local, no login. Thin client ov
 
 Tests for our application (models, Contract validation, codegen, checks, routing, sandbox, pipeline). Not the tests inside generated apps; those live in each generated project.
 
+`tests/fixtures/expense_tracker/` holds a hand-written sample run: `requirements.json`, `contract.json` and the generated-app project `expense-tracker/`. Our pytest does not collect it (see `tests/fixtures/README.md`).
+
 ## Runtime folders
 
 | Folder | Role |
@@ -129,8 +131,9 @@ Tests for our application (models, Contract validation, codegen, checks, routing
 | File | Role |
 |---|---|
 | `.env.example` | Config template: OpenRouter API key, model per agent (`PM_MODEL`, `ARCHITECT_MODEL`, `BACKEND_MODEL`, `FRONTEND_MODEL`, `TESTER_MODEL`), budget cap, sandbox limits. |
-| `requirements.txt` | Dependencies of this application (`pydantic`, `pydantic-settings`, `python-dotenv`, `docker`, `jinja2`, `crewai`, `fastapi`, `uvicorn[standard]`, `httpx`); full list with purpose in `README.md`. Empty now. |
+| `requirements.txt` | Dependencies of this application (`pydantic`, `pydantic-settings`, `python-dotenv`, `docker`, `jinja2`, `crewai`, `fastapi`, `uvicorn[standard]`, `httpx`); full list with purpose in `README.md`. |
 | `requirements-dev.txt` | Dev/test dependencies (`pytest`, `pytest-asyncio`, `ruff`). |
+| `pyproject.toml` | pytest settings (test paths, `docker`/`llm` markers) and ruff settings. |
 | `README.md` | Project overview, prerequisites, libraries, setup, config, workstreams and team conventions. |
 | `.gitignore` | Ignores `workspace/*`, `output/*` (except `.gitkeep`), `__pycache__/`, `.venv/`, `.env`. |
 

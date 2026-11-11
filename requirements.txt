@@ -1,0 +1,10 @@
+# This application. See README.md §3a for what each library is for.
+pydantic>=2.7,<3
+pydantic-settings>=2.3
+python-dotenv>=1.0
+docker>=7.1
+jinja2>=3.1
+crewai>=0.80
+fastapi>=0.115
+uvicorn[standard]>=0.30
+httpx>=0.27

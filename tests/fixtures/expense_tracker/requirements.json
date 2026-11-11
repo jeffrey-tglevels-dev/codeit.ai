@@ -1,0 +1,59 @@
+{
+  "project_name": "Expense Tracker",
+  "slug": "expense-tracker",
+  "summary": "Track personal expenses by category and see how much was spent each month.",
+  "features": [
+    {
+      "id": "F1",
+      "description": "Add an expense",
+      "acceptance": [
+        "amount must be > 0",
+        "the expense must belong to an existing category",
+        "a new expense appears in the list"
+      ]
+    },
+    {
+      "id": "F2",
+      "description": "List and view expenses",
+      "acceptance": [
+        "the list shows every expense, newest date first",
+        "viewing an expense that does not exist returns 404"
+      ]
+    },
+    {
+      "id": "F3",
+      "description": "Edit an expense",
+      "acceptance": [
+        "any field can be changed on its own",
+        "amount must stay > 0"
+      ]
+    },
+    {
+      "id": "F4",
+      "description": "Delete an expense",
+      "acceptance": [
+        "a deleted expense no longer appears in the list",
+        "deleting an expense that does not exist returns 404"
+      ]
+    },
+    {
+      "id": "F5",
+      "description": "Manage categories",
+      "acceptance": [
+        "category names are unique",
+        "a category that still has expenses cannot be deleted"
+      ]
+    },
+    {
+      "id": "F6",
+      "description": "Monthly summary",
+      "acceptance": [
+        "for a month YYYY-MM, shows the total amount and number of expenses",
+        "a month with no expenses shows total 0 and count 0",
+        "a badly formatted month returns 400"
+      ]
+    }
+  ],
+  "out_of_scope": ["user accounts and login", "multiple currencies", "budgets and alerts"],
+  "assumptions": ["one currency for all expenses", "dates have no time part"]
+}

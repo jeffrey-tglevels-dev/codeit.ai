@@ -7,7 +7,7 @@ A multi-agent coding system. You give it a one-line idea ("build me an expense t
 
 Generated apps always use the same stack: **FastAPI + SQLAlchemy 2.0 + SQLite + plain HTML/CSS/JS**.
 
-> **Status:** design done, implementation starting. Every `.py` file is currently an empty skeleton. See [Implementation plan](docs/Essentials/IMPLEMENTATION.md).
+> **Status:** Phase 1 done: typed models, Contract validation, config and a sample-app fixture (`tests/fixtures/`). Agents, codegen, sandbox and the pipeline are still empty skeletons. See [Implementation plan](docs/Essentials/IMPLEMENTATION.md).
 
 ---
 
@@ -47,7 +47,7 @@ On Windows, keep the repo on a local drive and make sure Docker Desktop is allow
 
 ### 3a. This application (install in your virtualenv)
 
-These go into the root `requirements.txt` (still empty; filling it is part of Phase 1).
+These are in the root `requirements.txt`.
 
 | Library | Used for | Phase |
 |---|---|---|
@@ -102,7 +102,7 @@ python -m venv .venv
 # Git Bash / macOS / Linux:
 source .venv/bin/activate
 
-# 3. Install dependencies (once requirements.txt is filled in Phase 1)
+# 3. Install dependencies
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
@@ -124,7 +124,7 @@ uvicorn main:app --reload   # entry module name TBD in Phase 4
 
 ## 5. Configuration (`.env`)
 
-`.env` is gitignored; never commit it. `.env.example` lists every key (created in Phase 1).
+`.env` is gitignored; never commit it. `.env.example` lists every key.
 
 | Variable | Meaning | Example |
 |---|---|---|
@@ -160,7 +160,7 @@ multi-coding-agent/
 └── output/          finished ZIPs (gitignored)
 ```
 
-The current skeleton still has old names (`agents/db_engineer.py`, `agents/developer.py`, `models/architecture.py`, `models/build.py`), and `codegen/` and `console/` are missing. Renaming and adding these is the first task in Phase 1.
+The skeleton now matches this layout (renamed in Phase 1). Files for later phases exist but are still empty.
 
 ---
 

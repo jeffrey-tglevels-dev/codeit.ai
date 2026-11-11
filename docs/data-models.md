@@ -51,7 +51,7 @@ Generated app layout is layered (see `generated-app-project-structure.md`):
 
 ```python
 class UserRequest(BaseModel):
-    idea: str          # "make an expense tracker"
+    idea: str  # "make an expense tracker"
 ```
 
 ---
@@ -62,10 +62,11 @@ The PM's questions and the operator's answers (one round).
 
 ```python
 class Question(BaseModel):
-    key: str                      # "fields"
-    question: str                 # "What fields should an expense have?"
-    suggestions: list[str] = []   # ["amount", "category", "date", "note"]
-    answer: str | None = None     # filled in by the operator
+    key: str  # "fields"
+    question: str  # "What fields should an expense have?"
+    suggestions: list[str] = []  # ["amount", "category", "date", "note"]
+    answer: str | None = None  # filled in by the operator
+
 
 class Inquiry(BaseModel):
     questions: list[Question]
@@ -79,16 +80,17 @@ What the PM hands to the Architect. Each feature has testable acceptance criteri
 
 ```python
 class Feature(BaseModel):
-    id: str                      # "F1"
-    description: str             # "Add an expense"
-    acceptance: list[str]        # ["amount must be > 0", "new expense appears in the list"]
+    id: str  # "F1"
+    description: str  # "Add an expense"
+    acceptance: list[str]  # ["amount must be > 0", "new expense appears in the list"]
+
 
 class Requirements(BaseModel):
-    project_name: str            # "Expense Tracker"
-    slug: str                    # "expense-tracker" (folder and ZIP name)
-    summary: str                 # one or two sentences
+    project_name: str  # "Expense Tracker"
+    slug: str  # "expense-tracker" (folder and ZIP name)
+    summary: str  # one or two sentences
     features: list[Feature]
-    out_of_scope: list[str] = [] # auth always lands here in v1
+    out_of_scope: list[str] = []  # auth always lands here in v1
     assumptions: list[str] = []  # gaps the PM filled in itself
 ```
 
@@ -101,42 +103,49 @@ The single source of truth for Backend, Frontend and Tester. Written in full by 
 ```python
 FieldType = Literal["integer", "text", "real", "boolean", "date", "datetime"]
 
+
 class Field(BaseModel):
-    name: str                      # snake_case: "amount"
+    name: str  # snake_case: "amount"
     type: FieldType
     required: bool = True
     unique: bool = False
-    description: str = ""          # helps the Frontend label form inputs
+    description: str = ""  # helps the Frontend label form inputs
 
-class Relation(BaseModel):         # one-to-many only in v1
-    field: str                     # foreign-key column on this entity: "category_id"
-    target: str                    # entity name: "category"
+
+class Relation(BaseModel):  # one-to-many only in v1
+    field: str  # foreign-key column on this entity: "category_id"
+    target: str  # entity name: "category"
     on_delete: Literal["cascade", "restrict", "set_null"] = "restrict"
 
+
 class Entity(BaseModel):
-    name: str                      # singular snake_case: "expense"
-    plural: str                    # "expenses" -> table name and URL path
-    fields: list[Field]            # `id` is implicit and never listed
+    name: str  # singular snake_case: "expense"
+    plural: str  # "expenses" -> table name and URL path
+    fields: list[Field]  # `id` is implicit and never listed
     relations: list[Relation] = []
+
 
 class Shape(BaseModel):
     """A request or response body: an entity view OR custom fields."""
-    entity: str | None = None                                # "expense"
+
+    entity: str | None = None  # "expense"
     view: Literal["create", "update", "read"] | None = None  # which generated schema
-    fields: list[Field] | None = None                        # custom shape, e.g. a monthly summary
-    many: bool = False                                       # list = plain JSON array, no pagination
+    fields: list[Field] | None = None  # custom shape, e.g. a monthly summary
+    many: bool = False  # list = plain JSON array, no pagination
+
 
 class Endpoint(BaseModel):
-    id: str                        # "list_expenses"; becomes the FastAPI operation_id
+    id: str  # "list_expenses"; becomes the FastAPI operation_id
     method: Literal["GET", "POST", "PUT", "DELETE"]
-    path: str                      # "/api/expenses/{id}"
+    path: str  # "/api/expenses/{id}"
     summary: str
-    features: list[str]            # Requirements feature ids this endpoint serves: ["F1"]
+    features: list[str]  # Requirements feature ids this endpoint serves: ["F1"]
     query_params: list[Field] = []
     request: Shape | None = None
     response: Shape | None = None  # None => 204 No Content
     success_status: Literal[200, 201, 204]
     error_statuses: list[Literal[400, 404, 409, 422]] = []
+
 
 class Contract(BaseModel):
     project_name: str
@@ -158,13 +167,22 @@ Errors are returned to the Architect for a retry.
 - Every `{param}` in a path is `id` or declared.
 - Paths follow `/api/<plural>` and `/api/<plural>/{id}` for entity endpoints.
 - Success status matches the method: `POST` -> 201, `DELETE` -> 204, others -> 200.
-- Every `Endpoint.features` id exists in `Requirements`, and every feature is served by at least one endpoint.
+- Every `Endpoint.features` id exists in `Requirements`, every endpoint serves at least one feature, and every feature is served by at least one endpoint.
+
+Added while implementing (so generated code is always valid Python and FastAPI routes never clash):
+
+- Entity names, plurals, field names, relation fields, query params and endpoint ids are snake_case; a plural differs from its name; relation fields are unique per entity.
+- All paths start with `/api/`. A path whose first segment is an entity plural must be exactly `/api/<plural>` or `/api/<plural>/{id}`, and its shapes may only use that entity. An endpoint whose shapes use an entity must live under that entity's plural. Custom endpoints use another prefix (e.g. `/api/summary`).
+- `POST` uses the collection path; `PUT` and `DELETE` on an entity use `/{id}`. `POST` and `PUT` need a request body.
+- A request body uses view `create` or `update` and is never a list; a response uses view `read`.
+
+All violations are reported together in one error. Feature rules need the `Requirements` in the validation context: `validate_contract(data, requirements)` or `Contract.model_validate(data, context={"requirements": requirements})`.
 
 ### Generated from the Contract (code, no LLM)
 
 | Output | Rule |
 |---|---|
-| `app/schemas/<entity>.py` | `<Entity>Read`: `id`, every field, foreign-key ids. `<Entity>Create`: fields and foreign-key ids, no `id`. `<Entity>Update`: every field optional (partial update over `PUT`). Custom `Shape.fields` become their own classes. |
+| `app/schemas/<entity>.py` | `<Entity>Read`: `id`, every field, foreign-key ids. `<Entity>Create`: fields and foreign-key ids, no `id`. `<Entity>Update`: every field optional (partial update over `PUT`). Custom `Shape.fields` become their own classes in `app/schemas/custom.py`, named `<EndpointIdInCamelCase><Request\|Response>` (e.g. `MonthlySummaryResponse`). |
 | `tests/contract/` | One test per endpoint: valid request returns `success_status` and a body that fits the declared `Shape`. |
 | `tests/conftest.py` | Test client and a temporary SQLite database. |
 | `tests/ui/` | Smoke test: `/` loads, no console errors, no failed requests. |
@@ -177,7 +195,7 @@ What Backend, Frontend and Tester return after writing files. `files_written` is
 
 ```python
 class CodeResult(BaseModel):
-    notes: str = ""              # anything the agent wants the next round to know
+    notes: str = ""  # anything the agent wants the next round to know
 ```
 
 The Tester names its tests `test_<feature_id>_<what>` so code can map tests to features.
@@ -193,7 +211,7 @@ class CheckResult(BaseModel):
     name: Literal["db_schema", "backend_contract", "frontend_contract", "tests"]
     passed: bool
     exit_code: int | None = None
-    report: dict | None = None   # parsed pytest JSON, or diff of openapi.json vs Contract
+    report: dict | None = None  # parsed pytest JSON, or diff of openapi.json vs Contract
     log_tail: str = ""
     duration_s: float
 ```
@@ -215,21 +233,23 @@ Built by code from the pytest JSON report.
 class TestResult(BaseModel):
     name: str
     kind: Literal["contract", "behavior", "ui"]
-    feature: str | None = None       # links back to a Requirements feature
+    feature: str | None = None  # links back to a Requirements feature
     passed: bool
     detail: str = ""
+
 
 class Failure(BaseModel):
     test: str
     owner: Literal["backend", "frontend", "tester", "architect"]
-    problem: str                     # "DELETE /api/expenses/1 returns 500"
-    evidence: str                    # response, traceback or console log
+    problem: str  # "DELETE /api/expenses/1 returns 500"
+    evidence: str  # response, traceback or console log
     files: list[str] = []
+
 
 class TestReport(BaseModel):
     results: list[TestResult]
     failures: list[Failure]
-    all_passed: bool                 # computed by code, never by an LLM
+    all_passed: bool  # computed by code, never by an LLM
 ```
 
 ---
@@ -255,7 +275,7 @@ The feedback a re-run agent receives, alongside its original input. The agent ed
 
 ```python
 class FixRequest(BaseModel):
-    round: int                   # 1..3
+    round: int  # 1..3
     owner: Literal["backend", "frontend", "tester", "architect"]
     failures: list[Failure]
     operator_note: str | None = None
@@ -269,23 +289,43 @@ class FixRequest(BaseModel):
 class Run(BaseModel):
     id: str
     idea: str
-    stage: Literal["inquiry", "awaiting_answers", "requirements", "architect",
-                   "build", "testing", "review", "fixing", "packaging",
-                   "done", "failed", "stopped"]
+    stage: Literal[
+        "inquiry",
+        "awaiting_answers",
+        "requirements",
+        "architect",
+        "build",
+        "testing",
+        "review",
+        "fixing",
+        "packaging",
+        "done",
+        "failed",
+        "stopped",
+    ]
     round: int = 0
     branches: dict[str, Literal["pending", "running", "done", "failed"]] = {}
     tokens_used: int = 0
     cost_usd: float | None = None
     created_at: datetime
-    error: str | None = None     # e.g. "budget" when the cap is hit
+    error: str | None = None  # e.g. "budget" when the cap is hit
 
-class RunEvent(BaseModel):       # append-only: workspace/<run_id>/events.jsonl
+
+class RunEvent(BaseModel):  # append-only: workspace/<run_id>/events.jsonl
     run_id: str
     ts: datetime
-    type: Literal["stage_started", "stage_finished", "check", "llm_call",
-                  "failure_routed", "operator_message", "error"]
+    type: Literal[
+        "stage_started",
+        "stage_finished",
+        "check",
+        "llm_call",
+        "failure_routed",
+        "operator_message",
+        "error",
+    ]
     stage: str
-    data: dict = {}              # llm_call: agent, model, tokens, cost, latency
+    data: dict = {}  # llm_call: agent, model, tokens, cost, latency
+
 
 class OperatorMessage(BaseModel):
     id: str
@@ -293,7 +333,7 @@ class OperatorMessage(BaseModel):
     target: Literal["pm", "architect", "backend", "frontend", "tester"]
     text: str
     created_at: datetime
-    consumed: bool = False       # injected into the target's next execution only
+    consumed: bool = False  # injected into the target's next execution only
 ```
 
 ---
@@ -304,19 +344,21 @@ Produced by code after the fix loop ends (no LLM). Two separate outputs: a sourc
 
 ```python
 class ZipResult(BaseModel):
-    zip_path: str                # "output/expense-tracker-<run_id>.zip"
+    zip_path: str  # "output/expense-tracker-<run_id>.zip"
     size_bytes: int
+
 
 class SandboxResult(BaseModel):
     image_tag: str | None = None
     image_built: bool = False
     container_id: str | None = None
     host_port: int | None = None
-    preview_url: str | None = None       # "http://localhost:9001"
-    expires_at: datetime | None = None   # container is removed after this
-    healthy: bool = False                # preview URL answered HTTP 200
+    preview_url: str | None = None  # "http://localhost:9001"
+    expires_at: datetime | None = None  # container is removed after this
+    healthy: bool = False  # preview URL answered HTTP 200
     build_log_tail: str = ""
     notes: str = ""
+
 
 class DeliveryResult(BaseModel):
     zip: ZipResult | None = None

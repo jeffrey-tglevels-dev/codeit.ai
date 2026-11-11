@@ -1,0 +1,24 @@
+[project]
+name = "codeit-ai"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The sample app under tests/fixtures/ has its own test suite; it runs in the sandbox, not here.
+norecursedirs = ["fixtures"]
+markers = [
+    "docker: needs a running Docker daemon",
+    "llm: calls a real LLM through OpenRouter",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's `Depends(...)` default is the idiomatic pattern in the generated-app fixture.
+"tests/fixtures/**" = ["B008"]

@@ -1,0 +1,6 @@
+# Dev / test only.
+pytest>=8.2
+pytest-asyncio>=0.23
+ruff>=0.5
+# Only to run the sample app fixture's own tests on the host (tests/fixtures/); not used by the app.
+sqlalchemy>=2.0
