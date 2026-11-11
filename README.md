@@ -23,8 +23,9 @@ Read the docs in this order. They are the source of truth: if code and docs disa
 | [docs/generated-app-project-structure.md](docs/generated-app-project-structure.md) | Layout of the apps we **generate**, and who writes each file |
 | [docs/decisions.md](docs/decisions.md) | Dated log of design decisions and why they were made |
 | [docs/Essentials/IMPLEMENTATION.md](docs/Essentials/IMPLEMENTATION.md) | The 4-phase plan and exit criteria for each phase |
+| [docs/Essentials/](docs/Essentials/) | Short summaries: project brief, MVP definition, requirements, architecture, decisions |
 
-> `docs/Essentials/` files other than `IMPLEMENTATION.md` still describe an older design (DB Engineer + Developer agents, Docker image download). Where they conflict, `docs/architecture.md` wins.
+> The files in `docs/Essentials/` are short summaries. Where they and the detailed docs above disagree, the detailed docs win, and the summary should be fixed.
 
 ---
 

@@ -2,7 +2,7 @@
 
 This describes the multi-coding-agent application itself, not the apps it generates (see `generated-app-project-structure.md` for those).
 
-**Status:** draft; file skeleton only. Every `.py`, `.tmpl`, `requirements.txt` and `README.md` is currently empty; only `.gitignore` and `docs/` have content. Nothing is implemented yet.
+**Status:** draft; file skeleton only. Every `.py`, `.tmpl` and `requirements.txt` is currently empty; only `.gitignore`, `README.md` and `docs/` have content. Nothing is implemented yet.
 
 **Skeleton vs target:** the empty skeleton still uses the old design's names (`agents/db_engineer.py`, `agents/developer.py`, `models/architecture.py`, `models/build.py`) and lacks `codegen/` and `console/`. They will be renamed and added in a later code change. The layout below is the target.
 
@@ -40,6 +40,7 @@ Pipeline: `PM -> Architect -> (Backend ∥ Frontend ∥ Tester) -> checks + test
 | `generated-app-project-structure.md` | Layout of the apps our agents generate and who writes each file. |
 | `decisions.md` | Dated log of design decisions and why they were made. |
 | `project-structure.md` | This file. |
+| `Essentials/` | Short summaries for the team: `PROJECT_BRIEF.md`, `MVP_DEFINITION.md`, `REQUIREMENTS.md`, `ARCHITECHTURE.md`, `DECISIONS.md`, and `IMPLEMENTATION.md` (the 4-phase plan). The detailed docs above win if they disagree. |
 
 ## `models/` - Pydantic data models
 
@@ -128,8 +129,9 @@ Tests for our application (models, Contract validation, codegen, checks, routing
 | File | Role |
 |---|---|
 | `.env.example` | Config template: OpenRouter API key, model per agent (`PM_MODEL`, `ARCHITECT_MODEL`, `BACKEND_MODEL`, `FRONTEND_MODEL`, `TESTER_MODEL`), budget cap, sandbox limits. |
-| `requirements.txt` | Dependencies of this application (`crewai`, `pydantic`, `fastapi`, `uvicorn`, `docker`). Empty now. |
-| `README.md` | Project overview and how to run it. |
+| `requirements.txt` | Dependencies of this application (`pydantic`, `pydantic-settings`, `python-dotenv`, `docker`, `jinja2`, `crewai`, `fastapi`, `uvicorn[standard]`, `httpx`); full list with purpose in `README.md`. Empty now. |
+| `requirements-dev.txt` | Dev/test dependencies (`pytest`, `pytest-asyncio`, `ruff`). |
+| `README.md` | Project overview, prerequisites, libraries, setup, config, workstreams and team conventions. |
 | `.gitignore` | Ignores `workspace/*`, `output/*` (except `.gitkeep`), `__pycache__/`, `.venv/`, `.env`. |
 
 ## Naming note

@@ -104,7 +104,7 @@ References: `docs/architecture.md`, `docs/data-models.md`, `docs/generated-app-p
 
 ---
 
-## Known doc inconsistencies
+## Related
 
-- The other files in `docs/Essentials/` still describe the old design (a DB Engineer and a Developer agent, and offering the Docker image for download). `docs/architecture.md` replaces both: Backend, Frontend and Tester agents, and the ZIP never contains an image. Update them so they don't contradict the newer docs.
-- `docs/Essentials/MVP_DEFINITION.md` is still empty.
+- Scope and "done" for the whole MVP: [`MVP_DEFINITION.md`](MVP_DEFINITION.md)
+- Libraries, setup and how to split the work: [`README.md`](../../README.md)

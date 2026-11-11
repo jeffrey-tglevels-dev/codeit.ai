@@ -28,3 +28,5 @@ Dated log of design decisions. Newest at the bottom. Each line: the decision, th
 | 20 | Agents built on CrewAI. | User choice; framework learning. Must verify structured output and tools with chosen models. |
 | 21 | Models come from OpenRouter; model per agent set in config. | Many models to compare; switching is a config change. |
 | 22 | Over budget: stop the run, mark failed `budget`, keep artifacts. | Predictable cost; nothing lost for debugging. |
+| 23 | `docs/Essentials/` are short summaries; `architecture.md`, `data-models.md` and this file are the source of truth. | One place to change the design; summaries were drifting (old DB Engineer/Developer agents, Docker image download). |
+| 24 | v1 delivers no Docker image download; the ZIP contains a `Dockerfile` and the image is only used for the local preview. | Keeps the ZIP small; anyone can rebuild the image from the `Dockerfile`. |
