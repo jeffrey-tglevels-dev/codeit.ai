@@ -1,31 +1,40 @@
 # Data Models and Data Flow
 
+Status: draft. Code in `models/` follows this file.
+
+Rule for every model: **what an agent says is kept apart from what code measures.** Agents return requirements, a contract, notes or verdicts. Anything that says "it works" (`passed`, `files_written`, `all_passed`, `healthy`) is filled in by code.
+
 ## Data flow
 
 ```
-UserRequest ──► Inquiry ──► Requirements ──► Architecture ──► DbResult ──► BuildResult ──► QAReport
-  (user)     (PM asks,      (PM writes)      (Architect)     (DB Eng)     (Developer)      (QA)
-             user answers)
+UserRequest ─► Inquiry ─► Requirements ─► Contract ─┬─► Backend  ─► CodeResult ─┐
+  (user)     (PM asks,    (PM writes)    (Architect) ├─► Frontend ─► CodeResult ─┼─► CheckResults ─► TestReport
+             user answers)                           └─► Tester   ─► CodeResult ─┘        (code)        (code)
+                                                                                                          │
+                     FixRequest ◄── routed Failures ◄── TestVerdicts (Tester review) ◄────────────────────┘
+                                                                                                          │
+                                                                              all passed / 3 rounds ─► DeliveryResult
 ```
 
 | Step | Who | Reads | Produces |
 |---|---|---|---|
-| 1 | User | | `UserRequest` |
+| 1 | Operator | | `UserRequest` |
 | 2 | PM | `UserRequest` | `Inquiry` (questions only) |
-| 3 | User | `Inquiry` | `Inquiry` (with answers) |
+| 3 | Operator | `Inquiry` | `Inquiry` (with answers) |
 | 4 | PM | `UserRequest` + answered `Inquiry` | `Requirements` |
-| 5 | Architect | `Requirements` | `Architecture` |
-| 6 | DB Engineer | `Architecture.tables` | `DbResult` |
-| 7 | Developer | `Architecture` + `DbResult` | `BuildResult` |
-| 8 | QA | `Requirements` + `Architecture` + `BuildResult` | `QAReport` |
-| 9 | Orchestrator | `QAReport` | sends each failure back to its `owner`, then QA re-runs (max 3 rounds) |
-
-| 10 | Packager + Sandbox (code, no LLM) | passing project in `workspace/` | `DeliveryResult` (zip + sandbox preview URL) |
+| 5 | Architect | `Requirements` | `Contract` (validated by code; errors sent back) |
+| 6 | Codegen (code) | `Contract` | `app/schemas/*.py`, contract tests, `tests/conftest.py`, UI smoke test |
+| 7 | Backend, Frontend, Tester (parallel) | `Contract` (+ `Requirements` for Tester) | `CodeResult` each |
+| 8 | Checks (code) | generated project | `CheckResult` per check |
+| 9 | Tests (code) | pytest JSON report | `TestReport` |
+| 10 | Tester (review) | its failing tests + evidence | `list[TestVerdict]` |
+| 11 | Orchestrator | verdicts + `TestReport` | `Failure`s routed by owner -> `FixRequest` per failed branch (max 3 rounds) |
+| 12 | Packager + Sandbox (code) | final project | `DeliveryResult` |
 
 Generated app stack is fixed: FastAPI + SQLAlchemy (ORM) + SQLite + HTML/CSS/JS.
 `app/models/` holds SQLAlchemy ORM classes; `app/core/database.py` holds the engine, session factory and `Base`.
 
-SQLAlchemy 2.0 style is required (the DB Engineer must not mix in 1.x patterns):
+SQLAlchemy 2.0 style is required (the Backend agent must not mix in 1.x patterns):
 - `class Base(DeclarativeBase)` in `core/database.py`
 - typed columns: `id: Mapped[int] = mapped_column(primary_key=True)`; use `Mapped[str | None]` for nullable
 - queries: `select(Model)` with `session.scalars(...)` / `session.execute(...)`, not `session.query(...)`
@@ -40,8 +49,6 @@ Generated app layout is layered (see `generated-app-project-structure.md`):
 
 ## 1. UserRequest
 
-The raw idea typed by the user.
-
 ```python
 class UserRequest(BaseModel):
     idea: str          # "make an expense tracker"
@@ -51,186 +58,249 @@ class UserRequest(BaseModel):
 
 ## 2. Inquiry
 
-The PM's questions and the user's answers (one round).
+The PM's questions and the operator's answers (one round).
 
 ```python
 class Question(BaseModel):
     key: str                      # "fields"
     question: str                 # "What fields should an expense have?"
     suggestions: list[str] = []   # ["amount", "category", "date", "note"]
-    answer: str | None = None     # filled in by the user
+    answer: str | None = None     # filled in by the operator
 
 class Inquiry(BaseModel):
     questions: list[Question]
-```
-
-```json
-{
-  "questions": [
-    {"key": "fields", "question": "What fields should an expense have?",
-     "suggestions": ["amount", "category", "date", "note"],
-     "answer": "amount, category, date, note"},
-    {"key": "auth", "question": "Do users need to log in?",
-     "suggestions": ["yes", "no"], "answer": "no"}
-  ]
-}
 ```
 
 ---
 
 ## 3. Requirements
 
-What the PM hands to the Architect.
+What the PM hands to the Architect. Each feature has testable acceptance criteria; the Tester writes tests against them.
 
 ```python
+class Feature(BaseModel):
+    id: str                      # "F1"
+    description: str             # "Add an expense"
+    acceptance: list[str]        # ["amount must be > 0", "new expense appears in the list"]
+
 class Requirements(BaseModel):
-    project_name: str              # "Expense Tracker"
-    summary: str                   # one or two sentences
-    features: list[str]            # ["add expense", "delete expense", "monthly summary"]
-    data_fields: list[str]         # ["amount", "category", "date", "note"]
-    needs_auth: bool = False
-    out_of_scope: list[str] = []   # ["charts"]
-    assumptions: list[str] = []    # gaps the PM filled in itself
+    project_name: str            # "Expense Tracker"
+    slug: str                    # "expense-tracker" (folder and ZIP name)
+    summary: str                 # one or two sentences
+    features: list[Feature]
+    out_of_scope: list[str] = [] # auth always lands here in v1
+    assumptions: list[str] = []  # gaps the PM filled in itself
 ```
 
 ---
 
-## 4. Architecture
+## 4. Contract
 
-Tables, endpoints and files. Nested: `Architecture` -> `Table` -> `Column`.
+The single source of truth for Backend, Frontend and Tester. Written in full by the Architect (every endpoint, including CRUD). Nested: `Contract` -> `Entity` -> `Field` / `Relation`, and `Contract` -> `Endpoint` -> `Shape`.
 
 ```python
-class Column(BaseModel):
-    name: str                          # "amount"
-    type: Literal["integer", "text", "real", "boolean", "date"]
-    primary_key: bool = False
-    required: bool = True
+FieldType = Literal["integer", "text", "real", "boolean", "date", "datetime"]
 
-class Table(BaseModel):
-    name: str                          # "expenses"
-    columns: list[Column]
+class Field(BaseModel):
+    name: str                      # snake_case: "amount"
+    type: FieldType
+    required: bool = True
+    unique: bool = False
+    description: str = ""          # helps the Frontend label form inputs
+
+class Relation(BaseModel):         # one-to-many only in v1
+    field: str                     # foreign-key column on this entity: "category_id"
+    target: str                    # entity name: "category"
+    on_delete: Literal["cascade", "restrict", "set_null"] = "restrict"
+
+class Entity(BaseModel):
+    name: str                      # singular snake_case: "expense"
+    plural: str                    # "expenses" -> table name and URL path
+    fields: list[Field]            # `id` is implicit and never listed
+    relations: list[Relation] = []
+
+class Shape(BaseModel):
+    """A request or response body: an entity view OR custom fields."""
+    entity: str | None = None                                # "expense"
+    view: Literal["create", "update", "read"] | None = None  # which generated schema
+    fields: list[Field] | None = None                        # custom shape, e.g. a monthly summary
+    many: bool = False                                       # list = plain JSON array, no pagination
 
 class Endpoint(BaseModel):
+    id: str                        # "list_expenses"; becomes the FastAPI operation_id
     method: Literal["GET", "POST", "PUT", "DELETE"]
-    path: str                          # "/api/expenses/{id}"
-    description: str                   # "Delete one expense"
+    path: str                      # "/api/expenses/{id}"
+    summary: str
+    features: list[str]            # Requirements feature ids this endpoint serves: ["F1"]
+    query_params: list[Field] = []
+    request: Shape | None = None
+    response: Shape | None = None  # None => 204 No Content
+    success_status: Literal[200, 201, 204]
+    error_statuses: list[Literal[400, 404, 409, 422]] = []
 
-class ProjectFile(BaseModel):
-    path: str                          # "app/routes/expenses.py"
-    purpose: str                       # "CRUD routes for expenses"
-    layer: Literal["core", "model", "repository", "schema", "service", "route", "static", "test"]
-    owner: Literal["db", "dev"]        # who writes it (derived from layer, see below)
-
-class Architecture(BaseModel):
-    tables: list[Table]
+class Contract(BaseModel):
+    project_name: str
+    entities: list[Entity]
     endpoints: list[Endpoint]
-    files: list[ProjectFile]           # flat list; the path carries the folder
 ```
 
-```json
-{
-  "tables": [{"name": "expenses", "columns": [
-    {"name": "id", "type": "integer", "primary_key": true},
-    {"name": "amount", "type": "real"},
-    {"name": "category", "type": "text"}]}],
-  "endpoints": [{"method": "POST", "path": "/api/expenses", "description": "Add an expense"}],
-  "files": [
-    {"path": "app/core/database.py", "purpose": "SQLAlchemy engine, SessionLocal, Base, get_db, init_db", "layer": "core", "owner": "db"},
-    {"path": "app/models/expense.py", "purpose": "Expense ORM class (expenses table)", "layer": "model", "owner": "db"},
-    {"path": "app/repositories/expense_repository.py", "purpose": "expense queries via SQLAlchemy Session", "layer": "repository", "owner": "db"},
-    {"path": "app/schemas/expense.py", "purpose": "expense request/response shapes", "layer": "schema", "owner": "dev"},
-    {"path": "app/services/expense_service.py", "purpose": "expense business rules", "layer": "service", "owner": "dev"},
-    {"path": "app/routes/expenses.py", "purpose": "CRUD routes for expenses", "layer": "route", "owner": "dev"}
-  ]
-}
-```
+Error responses are the same for every endpoint: `{"detail": str}` (FastAPI's default).
 
-The generated app is layered: `app/{core,models,repositories,schemas,services,routes,static}/`, plus `tests/`.
-The Architect lists one file per entity per layer (code can derive this from `tables`; the Architect fills in the purposes).
+### Validation (code, `model_validator`)
 
-File ownership by layer:
+Errors are returned to the Architect for a retry.
 
-| owner | layers / paths |
+- Entity names, plurals, endpoint ids and `(method, path)` pairs are unique.
+- Field names are unique per entity; none is called `id`.
+- Every `Relation.target` exists; `Relation.field` does not clash with a field.
+- Every `Shape.entity` exists; a `Shape` has either `entity` + `view` or `fields`, not both.
+- `GET` and `DELETE` have no request body; `204` means `response` is `None`.
+- Every `{param}` in a path is `id` or declared.
+- Paths follow `/api/<plural>` and `/api/<plural>/{id}` for entity endpoints.
+- Success status matches the method: `POST` -> 201, `DELETE` -> 204, others -> 200.
+- Every `Endpoint.features` id exists in `Requirements`, and every feature is served by at least one endpoint.
+
+### Generated from the Contract (code, no LLM)
+
+| Output | Rule |
 |---|---|
-| `db` (DB Engineer) | `core` (`app/core/`), `model` (`app/models/`), `repository` (`app/repositories/`) |
-| `dev` (Developer) | `schema`, `service`, `route`, `static`, `test`, plus `app/main.py` |
-
-Root files (`requirements.txt`, `Dockerfile`, `.dockerignore`, `.gitignore`, `.env.example`, `README.md`, `data/.gitkeep`)
-are written by the Packager (plain code) and are not listed in `Architecture.files`.
-
-Dependency rule: layers only call downward (route -> service -> repository). Routes never touch the DB directly.
+| `app/schemas/<entity>.py` | `<Entity>Read`: `id`, every field, foreign-key ids. `<Entity>Create`: fields and foreign-key ids, no `id`. `<Entity>Update`: every field optional (partial update over `PUT`). Custom `Shape.fields` become their own classes. |
+| `tests/contract/` | One test per endpoint: valid request returns `success_status` and a body that fits the declared `Shape`. |
+| `tests/conftest.py` | Test client and a temporary SQLite database. |
+| `tests/ui/` | Smoke test: `/` loads, no console errors, no failed requests. |
 
 ---
 
-## 5. DbResult
+## 5. CodeResult
 
-What the DB Engineer reports after writing its files.
+What Backend, Frontend and Tester return after writing files. `files_written` is recorded by the file-write tool, not reported by the agent.
 
 ```python
-class DbResult(BaseModel):
-    files_written: list[str]     # ["app/core/database.py", "app/models/expense.py", "app/repositories/expense_repository.py"]
-    repository_functions: list[str] = []   # ["expense_repository.create", ".get", ".list", ".delete"]
-    schema_ok: bool              # Base.metadata.create_all() succeeds on an empty SQLite file and the tables match Architecture.tables
-    notes: str = ""
+class CodeResult(BaseModel):
+    notes: str = ""              # anything the agent wants the next round to know
 ```
 
-`schema_ok` must be measured by code, not claimed by the agent.
-`repository_functions` tells the Developer which data-access functions really exist, so services call real code.
+The Tester names its tests `test_<feature_id>_<what>` so code can map tests to features.
 
 ---
 
-## 6. BuildResult
+## 6. CheckResult
 
-What the Developer reports after writing the app.
-
-```python
-class BuildResult(BaseModel):
-    files_written: list[str]
-    run_command: str             # "uvicorn app.main:app --port 8000"
-    app_starts: bool
-    notes: str = ""
-```
-
-`app_starts` must be measured by launching the app, not claimed by the agent.
-
----
-
-## 7. QAReport
-
-Test results; drives the fix loop. Nested: `QAReport` -> `TestCase` / `Failure`.
+Produced by code only. Every check runs in a fresh sandbox container, except the frontend check, which only reads files.
 
 ```python
-class TestCase(BaseModel):
-    name: str                          # "add expense returns 201"
+class CheckResult(BaseModel):
+    name: Literal["db_schema", "backend_contract", "frontend_contract", "tests"]
     passed: bool
-    detail: str = ""                   # error text if it failed
+    exit_code: int | None = None
+    report: dict | None = None   # parsed pytest JSON, or diff of openapi.json vs Contract
+    log_tail: str = ""
+    duration_s: float
+```
+
+| Check | What it does |
+|---|---|
+| `db_schema` | `Base.metadata.create_all()` on an empty SQLite file succeeds and the tables match `Contract.entities`. |
+| `backend_contract` | Start the app, read `/openapi.json`, compare every path, method, status and body shape to the `Contract`. |
+| `frontend_contract` | Every `fetch` path in `app/static/` exists in the `Contract`. |
+| `tests` | Run contract, behavior and UI tests; produce the pytest JSON report. |
+
+---
+
+## 7. TestReport
+
+Built by code from the pytest JSON report.
+
+```python
+class TestResult(BaseModel):
+    name: str
+    kind: Literal["contract", "behavior", "ui"]
+    feature: str | None = None       # links back to a Requirements feature
+    passed: bool
+    detail: str = ""
 
 class Failure(BaseModel):
-    problem: str                       # "DELETE /api/expenses/1 returns 500"
-    owner: Literal["dev", "db", "architect", "pm"]
-    how_to_reproduce: str
+    test: str
+    owner: Literal["backend", "frontend", "tester", "architect"]
+    problem: str                     # "DELETE /api/expenses/1 returns 500"
+    evidence: str                    # response, traceback or console log
+    files: list[str] = []
 
-class QAReport(BaseModel):
-    tests: list[TestCase]
+class TestReport(BaseModel):
+    results: list[TestResult]
     failures: list[Failure]
-    all_passed: bool
+    all_passed: bool                 # computed by code, never by an LLM
 ```
-
-Routing by `Failure.owner`:
-
-| owner | Re-run |
-|---|---|
-| `dev` | Developer |
-| `db` | DB Engineer, then Developer |
-| `architect` | Architect, then DB Engineer and Developer |
-| `pm` | PM |
 
 ---
 
-## 8. DeliveryResult
+## 8. TestVerdict
 
-Produced by code after QA passes (no LLM). Two separate outputs: a source ZIP and a Docker sandbox preview.
-The Docker image is never inside the ZIP.
+The Tester's review of its own failing behavior tests, before routing.
+
+```python
+class TestVerdict(BaseModel):
+    test: str
+    verdict: Literal["test_wrong", "code_wrong", "contract_gap"]
+    reason: str
+```
+
+`test_wrong` -> owner `tester`; `contract_gap` -> owner `architect`; `code_wrong` -> owner from the routing table in `architecture.md` (by file path).
+
+---
+
+## 9. FixRequest
+
+The feedback a re-run agent receives, alongside its original input. The agent edits its existing files; it does not regenerate them.
+
+```python
+class FixRequest(BaseModel):
+    round: int                   # 1..3
+    owner: Literal["backend", "frontend", "tester", "architect"]
+    failures: list[Failure]
+    operator_note: str | None = None
+```
+
+---
+
+## 10. Run state
+
+```python
+class Run(BaseModel):
+    id: str
+    idea: str
+    stage: Literal["inquiry", "awaiting_answers", "requirements", "architect",
+                   "build", "testing", "review", "fixing", "packaging",
+                   "done", "failed", "stopped"]
+    round: int = 0
+    branches: dict[str, Literal["pending", "running", "done", "failed"]] = {}
+    tokens_used: int = 0
+    cost_usd: float | None = None
+    created_at: datetime
+    error: str | None = None     # e.g. "budget" when the cap is hit
+
+class RunEvent(BaseModel):       # append-only: workspace/<run_id>/events.jsonl
+    run_id: str
+    ts: datetime
+    type: Literal["stage_started", "stage_finished", "check", "llm_call",
+                  "failure_routed", "operator_message", "error"]
+    stage: str
+    data: dict = {}              # llm_call: agent, model, tokens, cost, latency
+
+class OperatorMessage(BaseModel):
+    id: str
+    run_id: str
+    target: Literal["pm", "architect", "backend", "frontend", "tester"]
+    text: str
+    created_at: datetime
+    consumed: bool = False       # injected into the target's next execution only
+```
+
+---
+
+## 11. DeliveryResult
+
+Produced by code after the fix loop ends (no LLM). Two separate outputs: a source ZIP and a Docker sandbox preview. The Docker image is never inside the ZIP.
 
 ```python
 class ZipResult(BaseModel):
@@ -251,6 +321,7 @@ class SandboxResult(BaseModel):
 class DeliveryResult(BaseModel):
     zip: ZipResult | None = None
     sandbox: SandboxResult | None = None
+    test_report: TestReport | None = None  # attached, especially when not all tests passed
 ```
 
-`image_built` and `healthy` must be measured by code (build exit status, HTTP 200), not claimed.
+`image_built` and `healthy` are measured by code (build exit status, HTTP 200), not claimed.
